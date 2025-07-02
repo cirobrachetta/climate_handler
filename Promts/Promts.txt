@@ -1,0 +1,452 @@
+(Cargar Diagrama de clases)
+
+Una empresa nos convoca para armar una APP que controle el clima de un datacenter. La misma deberá
+tener registro (actual e histórico) de: temperatura, humedad y permitiendo controlar el “Clima” a través de
+una API de terceros (MS-Forecast) que se invocan desde la APP.
+
+Sobre el problema presentado realizar, en base al diagrama de clases provisto, y usando C++, con los principios SOLID, modularidad de Bertrand Meyer y GRASP:
+a. Desarrollar un APP que contenga las clases anteriores que además permita guardar históricos
+de temperatura y humedad. Además enviar alertas por mail.
+b. Aplicar TDD.
+c. Usar gestión de memoria automática mediante SmartPointers.
+d. El binario de C++ debe correr en un servidor HTTP. Y responder mensajes POST.
+e. El sistema debe ser persistente (Usaremos persistencia mediante un Archivo). Para el registro de la app.
+
+
+--------------------------------------------------
+
+main.cpp:
+#include "./include/ClimateHandler.hpp"
+#include "./include/httplib.h"
+
+int main() {
+    Climate_Handler handler;
+
+    httplib::Server svr;
+
+    svr.Get("/", [](const httplib::Request&, httplib::Response& res) {
+        res.set_content("¡Servidor funcionando en localhost:8080!", "text/plain");
+    });
+
+    std::cout << "Servidor escuchando en http://localhost:8080\n";
+    svr.listen("0.0.0.0", 8080);
+
+    svr.Post("/climate/up_temp", [&](const httplib::Request& req, httplib::Response& res) {
+        handler.Up_Temp(1);
+        res.set_content("Temperatura aumentada", "text/plain");
+    });
+
+    svr.Post("/climate/down_temp", [&](const httplib::Request& req, httplib::Response& res) {
+        handler.Down_Temp(1);
+        res.set_content("Temperatura disminuida", "text/plain");
+    });
+
+    svr.listen("0.0.0.0", 8080);
+}
+
+ClimateHandler.hpp:
+
+#pragma once
+#include "PersistenceHandler.hpp"
+#include "Notifier.hpp"
+#include "MSForecast.hpp"
+#include <memory>
+
+class Climate_Handler : public MS_Forecast {
+public:
+    Climate_Handler();
+    void Menu();
+
+    // Implementación de MS-Forecast API
+    void Up_Temp(int x) override;
+    void Down_Temp(int x) override;
+    void Up_Humidity(int x) override;
+    void Down_Humidity(int x) override;
+    int Read_Temp() override;
+    int Read_Humidity() override;
+
+private:
+    int ActualTemp;
+    int ActualHumity;
+    std::shared_ptr<Persistence_Handler> persistence;
+    std::shared_ptr<Notifier> notifier;
+
+    void checkThresholds();
+};
+
+
+ClimateHandler.cpp:
+
+#include "../include/ClimateHandler.hpp"
+#include "../include/Notification.hpp"
+#include <iostream>
+
+Climate_Handler::Climate_Handler()
+    : ActualTemp(25), ActualHumity(50),
+      persistence(std::make_shared<Persistence_Handler>()),
+      notifier(std::make_shared<Notifier>()) {}
+
+void Climate_Handler::Up_Temp(int x) {
+    ActualTemp += x;
+    persistence->Persist("Temp subida a " + std::to_string(ActualTemp));
+    checkThresholds();
+}
+
+void Climate_Handler::Down_Temp(int x) {
+    ActualTemp -= x;
+    persistence->Persist("Temp bajada a " + std::to_string(ActualTemp));
+    checkThresholds();
+}
+
+void Climate_Handler::Up_Humidity(int x) {
+    ActualHumity += x;
+    persistence->Persist("Humedad subida a " + std::to_string(ActualHumity));
+    checkThresholds();
+}
+
+void Climate_Handler::Down_Humidity(int x) {
+    ActualHumity -= x;
+    persistence->Persist("Humedad bajada a " + std::to_string(ActualHumity));
+    checkThresholds();
+}
+
+int Climate_Handler::Read_Temp() {
+    return ActualTemp;
+}
+
+int Climate_Handler::Read_Humidity() {
+    return ActualHumity;
+}
+
+void Climate_Handler::checkThresholds() {
+    if (ActualTemp > 30 || ActualHumity > 70) {
+        auto alert = std::make_shared<Notification>("Condición crítica de clima detectada.");
+        notifier->Notify(alert);
+    }
+}
+
+void Climate_Handler::Menu() {
+    std::cout << "Temperatura actual: " << ActualTemp << "\n";
+    std::cout << "Humedad actual: " << ActualHumity << "\n";
+}
+
+PersistenceHandler.hpp:
+
+#pragma once
+#include <string>
+#include <vector>
+#include <memory>
+
+class Persistence_Handler {
+public:
+    void Persist(const std::string& log);
+    void GetLog(const std::string& log) const;
+    std::vector<std::string> GetData() const;
+private:
+    const std::string filename = "climate_logs.txt";
+};
+
+PersistenceHandler.cpp:
+
+#include "../include/PersistenceHandler.hpp"
+#include <fstream>
+#include <iostream>
+
+void Persistence_Handler::Persist(const std::string& log) {
+    std::ofstream file(filename, std::ios::app);
+    if (file.is_open()) {
+        file << log << "\n";
+        file.close();
+    }
+}
+
+void Persistence_Handler::GetLog(const std::string& log) const {
+    std::cout << "[LOG PEDIDO] " << log << std::endl;
+}
+
+std::vector<std::string> Persistence_Handler::GetData() const {
+    std::ifstream file(filename);
+    std::vector<std::string> data;
+    std::string line;
+    while (getline(file, line)) {
+        data.push_back(line);
+    }
+    return data;
+}
+
+En base a estos archivos y sabiendo que el servidor HTTP ya funciona, empecemos a completar las consignas iniciales, tratando siempre de respetar los patrones SOLID, GRASP, y modularidad de Bertrand Meyer:
+
+a. Desarrollar un APP que contenga las clases anteriores que además permita guardar históricos
+de temperatura y humedad. Además enviar alertas por mail.
+b. Aplicar TDD.
+c. Usar gestión de memoria automática mediante SmartPointers.
+d. El binario de C++ debe correr en un servidor HTTP. Y responder mensajes POST.
+e. El sistema debe ser persistente (Usaremos persistencia mediante un Archivo). Para el registro de la app.
+
+empecemos por desarrollar un menu que se muestre por pantalla en el localhost para que el usuario interactue, tratando de hacer la menor cantidad posible de cambios a los archivos
+
+-----------------------------------------------------------------------------
+
+ok, ahora hagamos que se muestre en pantalla la temperatura y humedad actuales, y que se puedan persistir en un archivo usando las entidades que ya tenemos:
+
+PersistenceHandler.hpp:
+
+#pragma once
+#include <string>
+#include <vector>
+#include <memory>
+
+class Persistence_Handler {
+public:
+    void Persist(const std::string& log);
+    void GetLog(const std::string& log) const;
+    std::vector<std::string> GetData() const;
+private:
+    const std::string filename = "climate_logs.txt";
+};
+
+PersistenceHandler.cpp:
+
+#include "../include/PersistenceHandler.hpp"
+#include <fstream>
+#include <iostream>
+
+void Persistence_Handler::Persist(const std::string& log) {
+    std::ofstream file(filename, std::ios::app);
+    if (file.is_open()) {
+        file << log << "\n";
+        file.close();
+    }
+}
+
+void Persistence_Handler::GetLog(const std::string& log) const {
+    std::cout << "[LOG PEDIDO] " << log << std::endl;
+}
+
+std::vector<std::string> Persistence_Handler::GetData() const {
+    std::ifstream file(filename);
+    std::vector<std::string> data;
+    std::string line;
+    while (getline(file, line)) {
+        data.push_back(line);
+    }
+    return data;
+}
+--------------------------------------------------------------------------------------------------------------------
+
+Como podemos mejorar la eficiencia de el metodo para exponer la lista del log por pantalla de forma que tarde menos en actualizarce al cambio de la temperatura o humedad?
+
+ServerHandler.cpp:
+
+#include "../include/ServerHandler.hpp"
+#include <fstream>
+#include <sstream>
+
+ServerHandler::ServerHandler(std::shared_ptr<Climate_Handler> handler)
+    : climateHandler(handler) {}
+
+void ServerHandler::run() {
+    setupRoutes();
+    std::cout << "Servidor escuchando en http://localhost:8080\n";
+    svr.listen("0.0.0.0", 8080);
+}
+
+void ServerHandler::setupRoutes() {
+    svr.Get("/", [&](const httplib::Request&, httplib::Response& res) {
+        res.set_content(loadHtml("views/menu.html"), "text/html");
+    });
+
+    svr.Post("/climate/up_temp", [&](const httplib::Request&, httplib::Response& res) {
+        climateHandler->Up_Temp(1);
+        res.set_content("Temperatura aumentada", "text/plain");
+    });
+
+    svr.Post("/climate/down_temp", [&](const httplib::Request&, httplib::Response& res) {
+        climateHandler->Down_Temp(1);
+        res.set_content("Temperatura disminuida", "text/plain");
+    });
+
+    svr.Get("/climate/status", [&](const httplib::Request&, httplib::Response& res) {
+        std::string status = "Temperatura: " + std::to_string(climateHandler->Read_Temp()) +
+                            "°C<br>Humedad: " + std::to_string(climateHandler->Read_Humidity()) + "%";
+        res.set_content(status, "text/html");
+    });
+
+    // Persistir valores actuales (POST)
+    svr.Post("/climate/save", [&](const httplib::Request&, httplib::Response& res) {
+        int temp = climateHandler->Read_Temp();
+        int hum = climateHandler->Read_Humidity();
+        climateHandler->GetPersistence()->Persist("Estado guardado -> Temp: " + std::to_string(temp) +
+                                                ", Humedad: " + std::to_string(hum));
+        res.set_content("Estado actual guardado en archivo.", "text/plain");
+    });
+
+    // Mostrar el histórico como lista
+    svr.Get("/climate/logs", [&](const httplib::Request&, httplib::Response& res) {
+        std::vector<std::string> data = climateHandler->GetPersistence()->GetData();
+        std::string html = "<ul>";
+        int start = data.size() > 4 ? data.size() - 4 : 0;
+        for (size_t i = start; i < data.size(); ++i) {
+            html += "<li>" + data[i] + "</li>";
+        }
+        html += "</ul>";
+        res.set_content(html, "text/html");
+    });
+
+    svr.Post("/climate/save_csv", [&](const httplib::Request&, httplib::Response& res) {
+        int temp = climateHandler->Read_Temp();
+        int hum = climateHandler->Read_Humidity();
+
+        std::ofstream file("climate_data.csv", std::ios::app);
+        if (file.is_open()) {
+            file << "Temperatura: " << temp << ", Humedad: " << hum << "\n";
+            file.close();
+            res.set_content("Datos guardados en climate_data.csv", "text/plain");
+        } else {
+            res.set_content("Error al guardar CSV", "text/plain");
+        }
+    });
+
+    // Subir humedad
+    svr.Post("/climate/up_humidity", [&](const httplib::Request&, httplib::Response& res) {
+        climateHandler->Up_Humidity(1);
+        res.set_content("Humedad aumentada", "text/plain");
+    });
+
+    // Bajar humedad
+    svr.Post("/climate/down_humidity", [&](const httplib::Request&, httplib::Response& res) {
+        climateHandler->Down_Humidity(1);
+        res.set_content("Humedad disminuida", "text/plain");
+    });
+
+    // Podés seguir agregando más rutas POST/GET aquí...
+}
+
+std::string ServerHandler::loadHtml(const std::string& filename) {
+    std::ifstream file(filename);
+    if (file) {
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        return buffer.str();
+    }
+    return "Error al cargar la interfaz HTML.";
+}
+
+----------------------------------------------------------------------------------------
+
+PS C:\Users\cirob\OneDrive\Escritorio\Archivos VSC 3\Ingenieria II\Climate Handler> g++ -std=c++17 -Iinclude main.cpp src/ServerHandler.cpp src/ClimateHandler.cpp src/PersistenceHandler.cpp -o app.exe -lws2_32
+In file included from C:/mingw64/x86_64-w64-mingw32/include/wtypes.h:8,
+                 from C:/mingw64/x86_64-w64-mingw32/include/winscard.h:10,
+                 from C:/mingw64/x86_64-w64-mingw32/include/windows.h:97,
+                 from C:/mingw64/x86_64-w64-mingw32/include/winsock2.h:23,
+                 from ./include/httplib.h:200,
+                 from ./include/ServerHandler.hpp:4,
+                 from main.cpp:2:
+C:/mingw64/x86_64-w64-mingw32/include/rpcndr.h:64:11: error: reference to 'byte' is ambiguous
+   64 |   typedef byte cs_byte;
+      |           ^~~~
+In file included from C:/mingw64/lib/gcc/x86_64-w64-mingw32/12.2.0/include/c++/string:42,
+                 from C:/mingw64/lib/gcc/x86_64-w64-mingw32/12.2.0/include/c++/bits/locale_classes.h:40,
+                 from C:/mingw64/lib/gcc/x86_64-w64-mingw32/12.2.0/include/c++/bits/ios_base.h:41,
+                 from C:/mingw64/lib/gcc/x86_64-w64-mingw32/12.2.0/include/c++/ios:42,
+                 from C:/mingw64/lib/gcc/x86_64-w64-mingw32/12.2.0/include/c++/ostream:38,
+                 from C:/mingw64/lib/gcc/x86_64-w64-mingw32/12.2.0/include/c++/iostream:39,
+                 from ./include/PersistenceHandler.hpp:2,
+                 from ./include/ClimateHandler.hpp:2,
+                 from main.cpp:1:
+C:/mingw64/lib/gcc/x86_64-w64-mingw32/12.2.0/include/c++/bits/cpp_type_traits.h:406:30: note: candidates are: 'enum class std::byte'
+  406 |   enum class byte : unsigned char;
+      |                              ^~~~
+C:/mingw64/x86_64-w64-mingw32/include/rpcndr.h:63:25: note:                 'typedef unsigned char byte'
+   63 |   typedef unsigned char byte;
+      |                         ^~~~
+C:/mingw64/x86_64-w64-mingw32/include/rpcndr.h:397:170: error: reference to 'byte' is ambiguous
+  397 |   typedef void (__RPC_API *CS_TYPE_TO_NETCS_ROUTINE)(RPC_BINDING_HANDLE hBinding,unsigned __LONG32 ulNetworkCodeSet,void *pLocalData,unsigned __LONG32 ulLocalDataLength,byte *pNetworkData,unsigned __LONG32 *pulNetworkDataLength,error_status_t *pStatus);
+
+main.cpp:
+
+#include "./include/ClimateHandler.hpp"
+#include "./include/ServerHandler.hpp"
+#include <memory>
+
+int main() {
+    auto handler = std::make_shared<Climate_Handler>();
+    ServerHandler server(handler);
+    server.run();
+    return 0;
+}
+
+persistencehandler.hpp:
+
+#pragma once
+#include <iostream>
+using namespace std;
+#include <string>
+#include <vector>
+#include <memory>
+
+class Persistence_Handler {
+public:
+    void Persist(const std::string& log);
+    void GetLog(const std::string& log) const;
+    std::vector<std::string> GetData(int lastN = 4) const;
+private:
+    const std::string filename = "climate_logs.txt";
+};
+
+
+ClimateHandler.hpp:
+
+#pragma once
+#include "PersistenceHandler.hpp"
+#include "Notifier.hpp"
+#include "MSForecast.hpp"
+#include <memory>
+
+class Climate_Handler : public MS_Forecast {
+public:
+    Climate_Handler();
+    void Menu();
+
+    // Implementación de MS-Forecast API
+    void Up_Temp(int x) override;
+    void Down_Temp(int x) override;
+    void Up_Humidity(int x) override;
+    void Down_Humidity(int x) override;
+    int Read_Temp() override;
+    int Read_Humidity() override;
+    std::shared_ptr<Persistence_Handler> GetPersistence() const;
+
+private:
+    int ActualTemp;
+    int ActualHumity;
+    std::shared_ptr<Persistence_Handler> persistence;
+    std::shared_ptr<Notifier> notifier;
+
+    void checkThresholds();
+};
+
+ServerHandler.hpp:
+
+#pragma once
+
+#define CPPHTTPLIB_NO_STD_BYTE
+#include "httplib.h"
+
+#include "ClimateHandler.hpp"
+#include <memory>
+
+class ServerHandler {
+public:
+    ServerHandler(std::shared_ptr<Climate_Handler> handler);
+    void run();
+
+private:
+    std::shared_ptr<Climate_Handler> climateHandler;
+    httplib::Server svr;
+
+    void setupRoutes();
+    std::string loadHtml(const std::string& filename);
+};
+
+

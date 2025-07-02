@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Control de Clima</title>
+</head>
+<body>
+    <h1>Control de Clima del Datacenter</h1>
+
+    <button onclick="fetch('/climate/up_temp', {method: 'POST'})">+ Aumentar Temperatura</button>
+    <button onclick="fetch('/climate/down_temp', {method: 'POST'})">- Disminuir Temperatura</button><br><br>
+    <br>
+    <button onclick="fetch('/climate/up_humidity', {method: 'POST'})">+ Aumentar Humedad</button>
+    <button onclick="fetch('/climate/down_humidity', {method: 'POST'})">- Disminuir Humedad</button>
+
+    <p><strong>Estado actual:</strong></p>
+    <p id="status">Cargando...</p>
+
+    <button onclick="saveData()">Guardar en climate_data.csv</button>
+
+    <h2>Histórico de Cambios</h2>
+    <div id="logs">Cargando...</div>
+
+    <script>
+        // Actualizar estado cada 2 segundos
+        function updateStatus() {
+            fetch('/climate/status')
+                .then(res => res.text())
+                .then(data => {
+                    document.getElementById('status').innerHTML = data;
+                });
+        }
+
+        // Cargar histórico de logs
+        function loadLogs() {
+            fetch('/climate/logs')
+                .then(res => res.text())
+                .then(html => {
+                    document.getElementById('logs').innerHTML = html;
+                });
+        }
+
+        // Guardar estado actual en CSV
+        function saveData() {
+            fetch('/climate/save_csv', {method: 'POST'})
+                .then(res => res.text())
+                .then(alert);
+        }
+
+        // Llamadas iniciales y periódicas
+        updateStatus();
+        loadLogs();
+        setInterval(updateStatus, 1000);
+        setInterval(loadLogs, 1000);
+    </script>
+</body>
+</html>
