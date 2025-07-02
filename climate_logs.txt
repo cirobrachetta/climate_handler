@@ -117,3 +117,9 @@ Humedad subida a 51
 Humedad bajada a 50
 Temp subida a 26
 Temp bajada a 25
+Temp subida a 30
+Temp bajada a 22
+Humedad subida a 60
+Temp subida a 30
+Temp bajada a 22
+Humedad subida a 60

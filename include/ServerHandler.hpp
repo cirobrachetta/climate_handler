@@ -1,8 +1,5 @@
 #pragma once
-
-#define CPPHTTPLIB_NO_STD_BYTE
 #include "httplib.h"
-
 #include "ClimateHandler.hpp"
 #include <memory>
 
